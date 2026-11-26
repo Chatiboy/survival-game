@@ -12,7 +12,7 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'survival_secret')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet') 
 
 # Global State
-active_game = None # 'survival' or 'jumble'
+active_game = None 
 
 # --- SURVIVAL GAME VARIABLES ---
 survival_players = {}       
@@ -153,7 +153,7 @@ SURVIVAL_HOST_HTML = """
     </div>
     <script>
         const socket = io();
-        socket.emit('set_active_game', 'survival'); // WAKE UP CALL
+        socket.emit('set_active_game', 'survival');
         let roundInProgress = false;
 
         socket.on('update_players', (data) => {
@@ -181,6 +181,7 @@ SURVIVAL_HOST_HTML = """
             }
         });
         socket.on('answers_locked', () => {
+            playSound('lock');
             setTimeout(() => {
                 document.getElementById('lockBtn').style.display = 'none';
                 document.getElementById('revealBtn').style.display = 'block';
@@ -188,6 +189,7 @@ SURVIVAL_HOST_HTML = """
             }, 1500);
         });
         socket.on('reveal_answers', (data) => {
+            playSound('reveal');
             const container = document.getElementById('answerClusters'); container.innerHTML = '';
             document.getElementById('revealBtn').style.display = 'none';
             const sorted = Object.entries(data).sort((a, b) => b[1].length - a[1].length);
@@ -200,10 +202,24 @@ SURVIVAL_HOST_HTML = """
         });
         function startRound() {
             const q = document.getElementById('questionInput').value;
-            if(q) { socket.emit('survival_start_round', {question: q}); roundInProgress = true; document.getElementById('lockBtn').style.display = 'block'; document.getElementById('answerClusters').innerHTML = '<div class="locked-box"><h2>🔒 Collecting...</h2></div>'; }
+            if(q) { socket.emit('survival_start_round', {question: q}); roundInProgress = true; document.getElementById('lockBtn').style.display = 'block'; document.getElementById('answerClusters').innerHTML = '<div class="locked-box"><h2>🔒 Collecting...</h2></div>'; playSound('alert'); }
         }
         function lockAnswers() { socket.emit('survival_lock_answers'); document.getElementById('answerClusters').innerHTML = '<div class="locked-box"><h2>⏳ Locking...</h2></div>'; }
         function revealAnswers() { socket.emit('survival_reveal_answers'); }
+
+        // --- AUDIO ENGINE ---
+        let audioCtx;
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
+        function playSound(type) {
+            initAudio();
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            if (type === 'alert') { osc.type='square'; osc.frequency.setValueAtTime(400,now); osc.frequency.setValueAtTime(600,now+0.1); gain.gain.setValueAtTime(0.1,now); gain.gain.exponentialRampToValueAtTime(0.01,now+0.3); osc.start(now); osc.stop(now+0.3); }
+            else if (type === 'lock') { osc.type='sine'; osc.frequency.setValueAtTime(200,now); gain.gain.setValueAtTime(0.2,now); gain.gain.exponentialRampToValueAtTime(0.01,now+0.1); osc.start(now); osc.stop(now+0.1); }
+            else if (type === 'reveal') { osc.type='triangle'; osc.frequency.setValueAtTime(300,now); osc.frequency.exponentialRampToValueAtTime(800,now+0.4); gain.gain.setValueAtTime(0.2,now); gain.gain.exponentialRampToValueAtTime(0.01,now+0.5); osc.start(now); osc.stop(now+0.5); }
+        }
     </script>
 </body>
 </html>
@@ -259,9 +275,9 @@ JUMBLE_HOST_HTML = """
     </div>
     <script>
         const socket = io();
-        socket.emit('set_active_game', 'jumble'); // WAKE UP CALL
+        socket.emit('set_active_game', 'jumble');
 
-        socket.on('update_word', (data) => { document.getElementById('jumbledWord').innerText = data.scrambled; });
+        socket.on('update_word', (data) => { document.getElementById('jumbledWord').innerText = data.scrambled; playSound('whoosh'); });
         socket.on('update_leaderboard', (data) => {
             const lb = document.getElementById('leaderboard'); lb.innerHTML = '';
             const sorted = data.players.sort((a, b) => b.score - a.score);
@@ -273,7 +289,24 @@ JUMBLE_HOST_HTML = """
             });
             document.getElementById('nextBtn').disabled = (data.winners.length === 3);
             document.getElementById('nextBtn').innerText = data.winners.length === 3 ? "GAME OVER" : "NEXT WORD";
+            if(data.winners.length === 3) playSound('fanfare');
         });
+
+        let audioCtx;
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
+        function playSound(type) {
+            initAudio();
+            const now = audioCtx.currentTime;
+            if (type === 'whoosh') {
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type='sine'; osc.frequency.setValueAtTime(200,now); osc.frequency.exponentialRampToValueAtTime(800,now+0.2); gain.gain.setValueAtTime(0.1,now); gain.gain.exponentialRampToValueAtTime(0.01,now+0.2); osc.start(now); osc.stop(now+0.2);
+            } else if (type === 'fanfare') {
+                [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+                    const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination);
+                    o.type = 'triangle'; o.frequency.value = freq; g.gain.setValueAtTime(0.2, now + i*0.1); g.gain.exponentialRampToValueAtTime(0.01, now + i*0.1 + 0.4); o.start(now + i*0.1); o.stop(now + i*0.1 + 0.4);
+                });
+            }
+        }
     </script>
 </body>
 </html>
@@ -322,20 +355,30 @@ SURVIVAL_PLAYER_HTML = """
         const socket = io(); 
         let myName = "";
 
+        // --- AUDIO ENGINE ---
+        let audioCtx;
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
+        function playSound(type) {
+            initAudio();
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            if (type === 'join') { osc.type='sine'; osc.frequency.setValueAtTime(600,now); osc.frequency.exponentialRampToValueAtTime(800,now+0.1); gain.gain.setValueAtTime(0.2,now); gain.gain.exponentialRampToValueAtTime(0.01,now+0.2); osc.start(now); osc.stop(now+0.2); }
+            else if (type === 'eliminate') { osc.type='sawtooth'; osc.frequency.setValueAtTime(200,now); osc.frequency.exponentialRampToValueAtTime(50,now+0.8); gain.gain.setValueAtTime(0.3,now); gain.gain.exponentialRampToValueAtTime(0.01,now+0.8); osc.start(now); osc.stop(now+0.8); }
+            else if (type === 'submit') { osc.type='sine'; osc.frequency.setValueAtTime(1000,now); gain.gain.setValueAtTime(0.1,now); gain.gain.exponentialRampToValueAtTime(0.01,now+0.05); osc.start(now); osc.stop(now+0.05); }
+            else if (type === 'alert') { osc.type='square'; osc.frequency.setValueAtTime(400,now); osc.frequency.setValueAtTime(600,now+0.1); gain.gain.setValueAtTime(0.2,now); gain.gain.exponentialRampToValueAtTime(0.01,now+0.3); osc.start(now); osc.stop(now+0.3); }
+        }
+
         function getOrCreatePlayerId() {
             let id = localStorage.getItem('survival_player_id');
-            if (!id) {
-                id = 'player_' + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('survival_player_id', id);
-            }
+            if (!id) { id = 'player_' + Math.random().toString(36).substr(2, 9); localStorage.setItem('survival_player_id', id); }
             return id;
         }
 
         window.onload = function() {
             const savedName = localStorage.getItem('survival_player_name');
-            if(savedName) {
-                document.getElementById('nameInput').value = savedName;
-            }
+            if(savedName) document.getElementById('nameInput').value = savedName;
         };
 
         function joinGame() {
@@ -347,6 +390,7 @@ SURVIVAL_PLAYER_HTML = """
                 document.getElementById('joinScreen').classList.add('hidden');
                 document.getElementById('waitingScreen').classList.remove('hidden');
                 document.getElementById('playerName').innerText = myName;
+                playSound('join');
             }
         }
 
@@ -367,6 +411,7 @@ SURVIVAL_PLAYER_HTML = """
                 socket.emit('survival_submit_answer', {answer: ans});
                 document.getElementById('answerStatus').innerText = "✅ Locked in!";
                 document.getElementById('answerInput').disabled = true;
+                playSound('submit');
             }
         }
 
@@ -377,6 +422,7 @@ SURVIVAL_PLAYER_HTML = """
             document.getElementById('answerStatus').innerText = "";
             document.getElementById('answerInput').disabled = false;
             document.getElementById('answerInput').value = "";
+            playSound('alert');
         });
 
         socket.on('answer_count_update', (data) => {
@@ -394,6 +440,7 @@ SURVIVAL_PLAYER_HTML = """
             document.getElementById('answerScreen').classList.add('hidden');
             document.getElementById('waitingScreen').classList.add('hidden');
             document.getElementById('eliminatedScreen').classList.remove('hidden');
+            playSound('eliminate');
         });
     </script>
 </body>
@@ -443,20 +490,41 @@ JUMBLE_PLAYER_HTML = """
         const socket = io();
         let myName = "";
 
+        // --- AUDIO ENGINE ---
+        let audioCtx;
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
+        function playSound(type) {
+            initAudio();
+            const now = audioCtx.currentTime;
+            if (type === 'success') {
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type='sine'; osc.frequency.setValueAtTime(523.25,now); osc.frequency.exponentialRampToValueAtTime(1046.5,now+0.1); gain.gain.setValueAtTime(0.3,now); gain.gain.exponentialRampToValueAtTime(0.01,now+0.5); osc.start(now); osc.stop(now+0.5);
+            } else if (type === 'error') {
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type='sawtooth'; osc.frequency.setValueAtTime(150,now); gain.gain.setValueAtTime(0.3,now); gain.gain.exponentialRampToValueAtTime(0.01,now+0.3); osc.start(now); osc.stop(now+0.3);
+            } else if (type === 'join') {
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type='sine'; osc.frequency.setValueAtTime(600,now); osc.frequency.exponentialRampToValueAtTime(800,now+0.1); gain.gain.setValueAtTime(0.2,now); gain.gain.exponentialRampToValueAtTime(0.01,now+0.2); osc.start(now); osc.stop(now+0.2);
+            } else if (type === 'whoosh') {
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type='sine'; osc.frequency.setValueAtTime(200,now); osc.frequency.exponentialRampToValueAtTime(800,now+0.2); gain.gain.setValueAtTime(0.1,now); gain.gain.exponentialRampToValueAtTime(0.01,now+0.2); osc.start(now); osc.stop(now+0.2);
+            } else if (type === 'fanfare') {
+                [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+                    const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination);
+                    o.type = 'triangle'; o.frequency.value = freq; g.gain.setValueAtTime(0.2, now + i*0.1); g.gain.exponentialRampToValueAtTime(0.01, now + i*0.1 + 0.4); o.start(now + i*0.1); o.stop(now + i*0.1 + 0.4);
+                });
+            }
+        }
+
         function getOrCreatePlayerId() {
             let id = localStorage.getItem('jumble_player_id');
-            if (!id) {
-                id = 'player_' + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('jumble_player_id', id);
-            }
+            if (!id) { id = 'player_' + Math.random().toString(36).substr(2, 9); localStorage.setItem('jumble_player_id', id); }
             return id;
         }
 
         window.onload = function() {
             const savedName = localStorage.getItem('jumble_player_name');
-            if(savedName) {
-                document.getElementById('nameInput').value = savedName;
-            }
+            if(savedName) document.getElementById('nameInput').value = savedName;
         };
 
         function joinGame() {
@@ -467,6 +535,7 @@ JUMBLE_PLAYER_HTML = """
                 socket.emit('jumble_join', {name: myName, player_id: playerId});
                 document.getElementById('joinScreen').classList.add('hidden');
                 document.getElementById('gameScreen').classList.remove('hidden');
+                playSound('join');
             }
         }
 
@@ -497,6 +566,7 @@ JUMBLE_PLAYER_HTML = """
             document.getElementById('feedback').innerText = "";
             document.getElementById('guessInput').disabled = false;
             document.getElementById('guessInput').focus();
+            playSound('whoosh');
         });
 
         socket.on('update_my_score', (data) => {
@@ -504,13 +574,21 @@ JUMBLE_PLAYER_HTML = """
             if(data.won) {
                 document.getElementById('gameScreen').classList.add('hidden');
                 document.getElementById('winScreen').classList.remove('hidden');
+                playSound('fanfare');
             }
         });
 
         socket.on('guess_result', (data) => {
             const fb = document.getElementById('feedback');
-            fb.innerText = data.correct ? "✅ Correct! +1" : "❌ Wrong!";
-            fb.style.color = data.correct ? "#4ade80" : "#f87171";
+            if (data.correct) {
+                fb.innerText = "✅ Correct! +1";
+                fb.style.color = "#4ade80";
+                playSound('success');
+            } else {
+                fb.innerText = "❌ Wrong!";
+                fb.style.color = "#f87171";
+                playSound('error');
+            }
         });
     </script>
 </body>
