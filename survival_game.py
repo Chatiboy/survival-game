@@ -71,7 +71,7 @@ MENU_HTML = """
     <style>
         body { background: linear-gradient(135deg, #0f0f0f 0%, #1a1a2e 100%); color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
         h1 { font-size: 64px; margin-bottom: 50px; background: linear-gradient(90deg, #ef4444, #f97316); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 900; }
-        .menu-container { display: flex; gap: 40px; }
+        .menu-container { display: flex; gap: 40px; flex-wrap: wrap; justify-content: center;}
         .game-card { background: linear-gradient(145deg, #1e1e2e, #2a2a3e); padding: 40px; border-radius: 20px; width: 300px; text-align: center; cursor: pointer; transition: all 0.3s; text-decoration: none; color: white; border: 2px solid transparent; }
         .game-card:hover { transform: translateY(-10px); border-color: #f97316; box-shadow: 0 10px 30px rgba(249, 115, 22, 0.3); }
         .game-card h2 { font-size: 32px; margin-bottom: 15px; }
@@ -153,13 +153,15 @@ SURVIVAL_HOST_HTML = """
     </div>
     <script>
         const socket = io();
+        socket.emit('set_active_game', 'survival'); // WAKE UP CALL
         let roundInProgress = false;
+
         socket.on('update_players', (data) => {
             const list = document.getElementById('playerList'); list.innerHTML = ''; let aliveCount = 0;
             data.forEach(p => {
                 if(p.status === 'alive') aliveCount++;
                 const icon = p.status === 'alive' ? '✅' : '💀';
-                list.innerHTML += `<li class="${p.status}"><span>${p.name}</span><span>${icon}</span></li>`;
+                list.innerHTML += `<li><span>${p.name}</span><span>${icon}</span></li>`;
             });
             document.getElementById('aliveCount').innerText = aliveCount;
         });
@@ -257,6 +259,8 @@ JUMBLE_HOST_HTML = """
     </div>
     <script>
         const socket = io();
+        socket.emit('set_active_game', 'jumble'); // WAKE UP CALL
+
         socket.on('update_word', (data) => { document.getElementById('jumbledWord').innerText = data.scrambled; });
         socket.on('update_leaderboard', (data) => {
             const lb = document.getElementById('leaderboard'); lb.innerHTML = '';
@@ -269,84 +273,6 @@ JUMBLE_HOST_HTML = """
             });
             document.getElementById('nextBtn').disabled = (data.winners.length === 3);
             document.getElementById('nextBtn').innerText = data.winners.length === 3 ? "GAME OVER" : "NEXT WORD";
-        });
-        <script>
-        const socket = io();
-        let myName = "";
-
-        // Helper to create a secret ID card
-        function getOrCreatePlayerId() {
-            let id = localStorage.getItem('jumble_player_id');
-            if (!id) {
-                id = 'player_' + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('jumble_player_id', id);
-            }
-            return id;
-        }
-
-        window.onload = function() {
-            const savedName = localStorage.getItem('jumble_player_name');
-            if(savedName) {
-                myName = savedName;
-                const playerId = getOrCreatePlayerId();
-                socket.emit('jumble_join', {name: myName, player_id: playerId}); // Send ID!
-                document.getElementById('joinScreen').classList.add('hidden');
-                document.getElementById('gameScreen').classList.remove('hidden');
-            }
-        };
-
-        function joinGame() {
-            myName = document.getElementById('nameInput').value.trim();
-            if(myName) {
-                localStorage.setItem('jumble_player_name', myName);
-                const playerId = getOrCreatePlayerId();
-                socket.emit('jumble_join', {name: myName, player_id: playerId}); // Send ID!
-                document.getElementById('joinScreen').classList.add('hidden');
-                document.getElementById('gameScreen').classList.remove('hidden');
-            }
-        }
-
-        function changeName() {
-            localStorage.removeItem('jumble_player_name');
-            localStorage.removeItem('jumble_player_id'); // Clear ID card too
-            myName = "";
-            document.getElementById('joinScreen').classList.remove('hidden');
-            document.getElementById('gameScreen').classList.add('hidden');
-            document.getElementById('winScreen').classList.add('hidden');
-            document.getElementById('nameInput').value = "";
-        }
-
-        function submitGuess() {
-            const guess = document.getElementById('guessInput').value.trim().toUpperCase();
-            if(guess) {
-                socket.emit('jumble_submit_guess', {guess: guess});
-                document.getElementById('guessInput').value = "";
-            }
-        }
-
-        document.getElementById('guessInput').addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') submitGuess();
-        });
-
-        socket.on('update_word', (data) => {
-            document.getElementById('playerWord').innerText = data.scrambled;
-            document.getElementById('feedback').innerText = "";
-            document.getElementById('guessInput').disabled = false;
-            document.getElementById('guessInput').focus();
-        });
-
-        socket.on('update_my_score', (data) => {
-            document.getElementById('myScore').innerText = data.score;
-            if(data.won) {
-                document.getElementById('gameScreen').classList.add('hidden');
-                document.getElementById('winScreen').classList.remove('hidden');
-            }
-        });
-
-        socket.on('guess_result', (data) => {
-            const fb = document.getElementById('feedback');
-            fb.innerText = data.correct ? "✅ Correct! +1" : "❌ Wrong!";
-            fb.style.color = data.correct ? "#4ade80" : "#f87171";
         });
     </script>
 </body>
@@ -361,7 +287,7 @@ SURVIVAL_PLAYER_HTML = """
     <title>Survival Player</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { background: #111; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 10: 100vh; padding: 20px; text-align: center; }
+        body { background: #111; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; text-align: center; }
         h1 { color: #ef4444; font-size: 48px; }
         input { padding: 15px; background: #333; color: white; border: none; border-radius: 10px; width: 100%; max-width: 300px; font-size: 18px; margin-bottom: 15px; text-align: center;}
         button { padding: 15px 30px; border: none; border-radius: 10px; color: white; cursor: pointer; font-size: 20px; font-weight: bold; width: 100%; max-width: 300px; }
@@ -390,13 +316,12 @@ SURVIVAL_PLAYER_HTML = """
     </div>
     <div id="eliminatedScreen" class="hidden">
         <h1 style="font-size:60px;">💀 ELIMINATED 💀</h1>
-        <button class="btn-gray" onclick="changeName()" style="margin-top:20px;">🔄 Play Again with New Name</button>
+        <button class="btn-gray" onclick="changeName()" style="margin-top:20px;">🔄 Play Again</button>
     </div>
     <script>
         const socket = io(); 
         let myName = "";
 
-        // Helper to create a secret ID card
         function getOrCreatePlayerId() {
             let id = localStorage.getItem('survival_player_id');
             if (!id) {
@@ -428,85 +353,6 @@ SURVIVAL_PLAYER_HTML = """
         function changeName() {
             localStorage.removeItem('survival_player_name');
             localStorage.removeItem('survival_player_id');
-            myName = "";
-            document.getElementById('joinScreen').classList.remove('hidden');
-            document.getElementById('waitingScreen').classList.add('hidden');
-            document.getElementById('answerScreen').classList.add('hidden');
-            document.getElementById('eliminatedScreen').classList.add('hidden');
-            document.getElementById('nameInput').value = "";
-        }
-
-        function submitAnswer() {
-            const ans = document.getElementById('answerInput').value;
-            if(ans) {
-                socket.emit('survival_submit_answer', {answer: ans});
-                document.getElementById('answerStatus').innerText = "✅ Locked in!";
-                document.getElementById('answerInput').disabled = true;
-            }
-        }
-
-        socket.on('round_started', (data) => {
-            document.getElementById('waitingScreen').classList.add('hidden');
-            document.getElementById('answerScreen').classList.remove('hidden');
-            document.getElementById('questionText').innerText = data.question;
-            document.getElementById('answerStatus').innerText = "";
-            document.getElementById('answerInput').disabled = false;
-            document.getElementById('answerInput').value = "";
-        });
-
-        socket.on('answer_count_update', (data) => {
-            const c = document.getElementById('tensionCounter');
-            c.style.display = 'block';
-            c.innerText = `${data.count} / ${data.total} answered`;
-        });
-
-        socket.on('round_locked', () => {
-            document.getElementById('answerStatus').innerText = "Host reviewing...";
-            document.getElementById('tensionCounter').style.display = 'none';
-        });
-
-        socket.on('eliminated', () => {
-            document.getElementById('answerScreen').classList.add('hidden');
-            document.getElementById('waitingScreen').classList.add('hidden');
-            document.getElementById('eliminatedScreen').classList.remove('hidden');
-        });
-    </script>
-        const socket = io(); 
-        let myName = "";
-
-        // Helper to create a secret ID card
-        function getOrCreatePlayerId() {
-            let id = localStorage.getItem('survival_player_id');
-            if (!id) {
-                id = 'player_' + Math.random().toString(36).substr(2, 9);
-                localStorage.setItem('survival_player_id', id);
-            }
-            return id;
-        }
-
-        window.onload = function() {
-            const savedName = localStorage.getItem('survival_player_name');
-            if(savedName) {
-                // Pre-fill the box instead of hiding it!
-                document.getElementById('nameInput').value = savedName;
-            }
-        };
-
-        function joinGame() {
-            myName = document.getElementById('nameInput').value;
-            if(myName) {
-                localStorage.setItem('survival_player_name', myName);
-                const playerId = getOrCreatePlayerId();
-                socket.emit('survival_join', {name: myName, player_id: playerId});
-                document.getElementById('joinScreen').classList.add('hidden');
-                document.getElementById('waitingScreen').classList.remove('hidden');
-                document.getElementById('playerName').innerText = myName;
-            }
-        }
-
-        function changeName() {
-            localStorage.removeItem('survival_player_name');
-            localStorage.removeItem('survival_player_id'); // Clear ID card too
             myName = "";
             document.getElementById('joinScreen').classList.remove('hidden');
             document.getElementById('waitingScreen').classList.add('hidden');
@@ -591,13 +437,12 @@ JUMBLE_PLAYER_HTML = """
     </div>
     <div id="winScreen" class="hidden">
         <h1 style="font-size:60px;">🏆 YOU WIN! 🏆</h1>
-        <button class="btn-gray" onclick="changeName()" style="margin-top:20px;">🔄 Play Again with New Name</button>
+        <button class="btn-gray" onclick="changeName()" style="margin-top:20px;">🔄 Play Again</button>
     </div>
     <script>
         const socket = io();
         let myName = "";
 
-        // Helper to create a secret ID card
         function getOrCreatePlayerId() {
             let id = localStorage.getItem('jumble_player_id');
             if (!id) {
@@ -747,17 +592,28 @@ def play_jumble():
     return render_template_string(JUMBLE_PLAYER_HTML)
 
 # ==========================================
-# SOCKETIO EVENTS - SURVIVAL
+# SOCKETIO EVENTS
 # ==========================================
+
+@socketio.on('set_active_game')
+def handle_set_active_game(data):
+    global active_game
+    active_game = data
+    print(f"Host set active game to: {active_game}")
+    
+    if active_game == 'jumble':
+        jumble_broadcast_leaderboard()
+    elif active_game == 'survival':
+        survival_broadcast_players()
+        survival_broadcast_answer_status()
 
 @socketio.on('survival_join')
 def survival_handle_join(data):
     if active_game != 'survival': return
     sid = request.sid
     name = data['name']
-    player_id = data.get('player_id') # Get the secret ID card
+    player_id = data.get('player_id')
 
-    # Check if this player_id already exists
     existing_sid = None
     for s, p in survival_players.items():
         if p.get('player_id') == player_id:
@@ -765,11 +621,9 @@ def survival_handle_join(data):
             break
 
     if existing_sid:
-        # Player is reloading! Move their data to the new connection
         player_data = survival_players.pop(existing_sid)
         survival_players[sid] = player_data
     else:
-        # Brand new player
         survival_players[sid] = {'name': name, 'status': 'alive', 'answer': '', 'player_id': player_id}
         
     survival_broadcast_players()
@@ -838,18 +692,13 @@ def survival_broadcast_answer_status():
     answered = sum(1 for p in alive if p['answer'])
     emit('answer_count_update', {'count': answered, 'total': len(alive)}, broadcast=True)
 
-# ==========================================
-# SOCKETIO EVENTS - JUMBLE
-# ==========================================
-
 @socketio.on('jumble_join')
 def jumble_handle_join(data):
     if active_game != 'jumble': return
     sid = request.sid
     name = data['name'].strip()
-    player_id = data.get('player_id') # Get the secret ID card
+    player_id = data.get('player_id')
 
-    # Check if this player_id already exists in our dictionary
     existing_sid = None
     for s, p in jumble_players.items():
         if p.get('player_id') == player_id:
@@ -857,11 +706,9 @@ def jumble_handle_join(data):
             break
 
     if existing_sid:
-        # Player is reloading! Move their data to the new connection
         player_data = jumble_players.pop(existing_sid)
         jumble_players[sid] = player_data
     else:
-        # Brand new player
         jumble_players[sid] = {'name': name, 'score': 0, 'rank': None, 'player_id': player_id}
 
     jumble_broadcast_leaderboard()
