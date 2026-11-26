@@ -420,11 +420,71 @@ SONG_HOST_HTML = """
     <script>
         const socket = io(); socket.emit('set_active_game', 'song');
         let currentNotes = [];
+        
+        // --- REAL PIANO AUDIO ENGINE ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const pianoBuffers = {};
+        const notesList = ['C3','D3','E3','F3','G3','A3','B3','C4','D4','E4','F4','G4','A4','B4','C5','D5','E5','F5','G5','A5','B5'];
+        // We use a public CDN that hosts real acoustic grand piano recordings
+        const baseUrl = 'https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@gh-pages/FluidR3_GM/acoustic_grand_piano-mp3/';
+        let pianoLoaded = false;
+
+        document.getElementById('answerReveal').innerText = "Loading Real Piano...";
+
+        // Preload all piano notes into memory so there is zero lag when playing
+        async function loadPiano() {
+            try {
+                const promises = notesList.map(async (note) => {
+                    const response = await fetch(baseUrl + note + '.mp3');
+                    const arrayBuffer = await response.arrayBuffer();
+                    pianoBuffers[note] = await audioCtx.decodeAudioData(arrayBuffer);
+                });
+                await Promise.all(promises);
+                pianoLoaded = true;
+                document.getElementById('answerReveal').innerText = "🎹 Piano Ready! Click Play.";
+            } catch (e) {
+                document.getElementById('answerReveal').innerText = "Error loading piano. Check internet.";
+            }
+        }
+        loadPiano(); // Start loading immediately when page opens
+
+        function playNote(noteName, startTime, duration) {
+            if (!pianoBuffers[noteName]) return;
+            const source = audioCtx.createBufferSource();
+            source.buffer = pianoBuffers[noteName];
+            const gainNode = audioCtx.createGain();
+            source.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            // Natural piano decay (lets the note ring out beautifully)
+            gainNode.gain.setValueAtTime(1, startTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration + 1.5); 
+
+            source.start(startTime);
+        }
+
+        function playMelody() {
+            if(currentNotes.length === 0 || !pianoLoaded) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            document.getElementById('musicIcon').innerText = "🎶";
+            document.getElementById('answerReveal').innerText = "Playing...";
+            const now = audioCtx.currentTime;
+            let time = now + 0.1;
+            
+            currentNotes.forEach(noteObj => {
+                playNote(noteObj.n, time, noteObj.d);
+                time += noteObj.d + 0.05; // Small gap between notes
+            });
+            
+            setTimeout(() => { document.getElementById('musicIcon').innerText = "🎹"; }, (time - now) * 1000);
+        }
+        // --- END PIANO ENGINE ---
 
         socket.on('update_song', (data) => { 
             currentNotes = data.notes; 
-            document.getElementById('answerReveal').innerText = "Listen closely..."; 
             document.getElementById('musicIcon').innerText = "🎹";
+            if(pianoLoaded) document.getElementById('answerReveal').innerText = "Piano Ready! Click Play.";
         });
         socket.on('reveal_song_answer', (data) => { document.getElementById('answerReveal').innerText = "Answer: " + data.answer; });
         socket.on('update_leaderboard', (data) => { 
@@ -436,58 +496,6 @@ SONG_HOST_HTML = """
             document.getElementById('nextBtn').disabled = (data.winners.length === 3); 
             document.getElementById('nextBtn').innerText = data.winners.length === 3 ? "GAME OVER" : "NEXT SONG"; 
         });
-
-        // PIANO SYNTHESIZER
-        let audioCtx;
-        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
-        
-        function playNote(freq, startTime, duration) {
-            // Real pianos have harmonics. We layer 3 sine waves to mimic a real piano.
-            const harmonics = [
-                { mult: 1, vol: 0.4, decay: duration },       // Main note
-                { mult: 2, vol: 0.15, decay: duration * 0.6 }, // Higher harmonic (fades faster)
-                { mult: 3, vol: 0.05, decay: duration * 0.3 }  // Highest harmonic (fades very fast)
-            ];
-
-            harmonics.forEach(h => {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                
-                osc.type = 'sine'; 
-                osc.frequency.value = freq * h.mult;
-                
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                
-                // Realistic piano envelope (fast attack, natural decay)
-                gain.gain.setValueAtTime(0, startTime);
-                gain.gain.linearRampToValueAtTime(h.vol, startTime + 0.02); 
-                gain.gain.exponentialRampToValueAtTime(0.001, startTime + h.decay); 
-                
-                osc.start(startTime);
-                osc.stop(startTime + h.decay + 0.1);
-            });
-        }
-
-        function playMelody() {
-            if(currentNotes.length === 0) return;
-            initAudio();
-            document.getElementById('musicIcon').innerText = "🎶";
-            document.getElementById('answerReveal').innerText = "Playing...";
-            const now = audioCtx.currentTime;
-            let time = now + 0.1;
-            const noteMap = {'C3':130.81,'D3':146.83,'E3':164.81,'F3':174.61,'G3':196.00,'A3':220.00,'B3':246.94,'C4':261.63,'D4':293.66,'E4':329.63,'F4':349.23,'G4':392.00,'A4':440.00,'B4':493.88,'C5':523.25,'D5':587.33,'E5':659.25,'F5':698.46,'G5':783.99,'A5':880.00,'B5':987.77};
-            
-            currentNotes.forEach(noteObj => {
-                const freq = noteMap[noteObj.n];
-                if(freq) {
-                    playNote(freq, time, noteObj.d);
-                    time += noteObj.d + 0.05; // Small gap between notes
-                }
-            });
-            
-            setTimeout(() => { document.getElementById('musicIcon').innerText = "🎹"; }, (time - now) * 1000);
-        }
     </script>
 </body>
 </html>
