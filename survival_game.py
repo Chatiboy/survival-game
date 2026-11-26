@@ -283,17 +283,26 @@ SURVIVAL_PLAYER_HTML = """
     <title>Survival Player</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        body { background: #111; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; text-align: center; }
+        body { background: #111; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 10: 100vh; padding: 20px; text-align: center; }
         h1 { color: #ef4444; font-size: 48px; }
         input { padding: 15px; background: #333; color: white; border: none; border-radius: 10px; width: 100%; max-width: 300px; font-size: 18px; margin-bottom: 15px; text-align: center;}
         button { padding: 15px 30px; border: none; border-radius: 10px; color: white; cursor: pointer; font-size: 20px; font-weight: bold; width: 100%; max-width: 300px; }
-        .btn-green { background: #16a34a; } .btn-blue { background: #2563eb; }
+        .btn-green { background: #16a34a; } .btn-blue { background: #2563eb; } .btn-gray { background: #6b7280; margin-top: 10px; }
         .hidden { display: none; }
     </style>
 </head>
 <body>
-    <div id="joinScreen"><h1>SURVIVAL</h1><input type="text" id="nameInput" placeholder="Enter your name..."><br><br><button class="btn-green" onclick="joinGame()">JOIN</button></div>
-    <div id="waitingScreen" class="hidden"><h2>Welcome, <span id="playerName"></span>!</h2><p style="color:#9ca3af;">Waiting for host...</p></div>
+    <div id="joinScreen">
+        <h1>SURVIVAL</h1>
+        <input type="text" id="nameInput" placeholder="Enter your name...">
+        <br><br>
+        <button class="btn-green" onclick="joinGame()">JOIN</button>
+    </div>
+    <div id="waitingScreen" class="hidden">
+        <h2>Welcome, <span id="playerName"></span>!</h2>
+        <p style="color:#9ca3af;">Waiting for host...</p>
+        <button class="btn-gray" onclick="changeName()" style="margin-top:20px;">🔄 Change Name</button>
+    </div>
     <div id="answerScreen" class="hidden" style="width:100%; max-width:400px;">
         <h2 style="color:#facc15;" id="questionText"></h2>
         <input type="text" id="answerInput" placeholder="Your answer...">
@@ -301,15 +310,83 @@ SURVIVAL_PLAYER_HTML = """
         <p id="answerStatus" style="margin-top:15px; color:#9ca3af;"></p>
         <p id="tensionCounter" style="font-size:24px; color:#facc15; margin-top:20px; display:none;"></p>
     </div>
-    <div id="eliminatedScreen" class="hidden"><h1 style="font-size:60px;">💀 ELIMINATED 💀</h1></div>
+    <div id="eliminatedScreen" class="hidden">
+        <h1 style="font-size:60px;">💀 ELIMINATED 💀</h1>
+        <button class="btn-gray" onclick="changeName()" style="margin-top:20px;">🔄 Play Again with New Name</button>
+    </div>
     <script>
-        const socket = io(); let myName = "";
-        function joinGame() { myName = document.getElementById('nameInput').value; if(myName) { socket.emit('survival_join', {name: myName}); document.getElementById('joinScreen').classList.add('hidden'); document.getElementById('waitingScreen').classList.remove('hidden'); document.getElementById('playerName').innerText = myName; } }
-        function submitAnswer() { const ans = document.getElementById('answerInput').value; if(ans) { socket.emit('survival_submit_answer', {answer: ans}); document.getElementById('answerStatus').innerText = "✅ Locked in!"; document.getElementById('answerInput').disabled = true; } }
-        socket.on('round_started', (data) => { document.getElementById('waitingScreen').classList.add('hidden'); document.getElementById('answerScreen').classList.remove('hidden'); document.getElementById('questionText').innerText = data.question; document.getElementById('answerStatus').innerText = ""; document.getElementById('answerInput').disabled = false; document.getElementById('answerInput').value = ""; });
-        socket.on('answer_count_update', (data) => { const c = document.getElementById('tensionCounter'); c.style.display = 'block'; c.innerText = `${data.count} / ${data.total} answered`; });
-        socket.on('round_locked', () => { document.getElementById('answerStatus').innerText = "Host reviewing..."; document.getElementById('tensionCounter').style.display = 'none'; });
-        socket.on('eliminated', () => { document.getElementById('answerScreen').classList.add('hidden'); document.getElementById('waitingScreen').classList.add('hidden'); document.getElementById('eliminatedScreen').classList.remove('hidden'); });
+        const socket = io();
+        let myName = "";
+
+        // Check if there's a saved name in localStorage
+        window.onload = function() {
+            const savedName = localStorage.getItem('survival_player_name');
+            if(savedName) {
+                myName = savedName;
+                socket.emit('survival_join', {name: myName});
+                document.getElementById('joinScreen').classList.add('hidden');
+                document.getElementById('waitingScreen').classList.remove('hidden');
+                document.getElementById('playerName').innerText = myName;
+            }
+        };
+
+        function joinGame() {
+            myName = document.getElementById('nameInput').value.trim();
+            if(myName) {
+                // Save name to localStorage
+                localStorage.setItem('survival_player_name', myName);
+                socket.emit('survival_join', {name: myName});
+                document.getElementById('joinScreen').classList.add('hidden');
+                document.getElementById('waitingScreen').classList.remove('hidden');
+                document.getElementById('playerName').innerText = myName;
+            }
+        }
+
+        function changeName() {
+            // Clear saved name
+            localStorage.removeItem('survival_player_name');
+            myName = "";
+            document.getElementById('joinScreen').classList.remove('hidden');
+            document.getElementById('waitingScreen').classList.add('hidden');
+            document.getElementById('answerScreen').classList.add('hidden');
+            document.getElementById('eliminatedScreen').classList.add('hidden');
+            document.getElementById('nameInput').value = "";
+        }
+
+        function submitAnswer() {
+            const ans = document.getElementById('answerInput').value;
+            if(ans) {
+                socket.emit('survival_submit_answer', {answer: ans});
+                document.getElementById('answerStatus').innerText = "✅ Locked in!";
+                document.getElementById('answerInput').disabled = true;
+            }
+        }
+
+        socket.on('round_started', (data) => {
+            document.getElementById('waitingScreen').classList.add('hidden');
+            document.getElementById('answerScreen').classList.remove('hidden');
+            document.getElementById('questionText').innerText = data.question;
+            document.getElementById('answerStatus').innerText = "";
+            document.getElementById('answerInput').disabled = false;
+            document.getElementById('answerInput').value = "";
+        });
+
+        socket.on('answer_count_update', (data) => {
+            const c = document.getElementById('tensionCounter');
+            c.style.display = 'block';
+            c.innerText = `${data.count} / ${data.total} answered`;
+        });
+
+        socket.on('round_locked', () => {
+            document.getElementById('answerStatus').innerText = "Host reviewing...";
+            document.getElementById('tensionCounter').style.display = 'none';
+        });
+
+        socket.on('eliminated', () => {
+            document.getElementById('answerScreen').classList.add('hidden');
+            document.getElementById('waitingScreen').classList.add('hidden');
+            document.getElementById('eliminatedScreen').classList.remove('hidden');
+        });
     </script>
 </body>
 </html>
@@ -327,7 +404,7 @@ JUMBLE_PLAYER_HTML = """
         h1 { color: #f97316; font-size: 48px; }
         input { padding: 15px; background: #333; color: white; border: none; border-radius: 10px; width: 100%; max-width: 300px; font-size: 20px; margin-bottom: 15px; text-align: center; text-transform: uppercase;}
         button { padding: 15px 30px; border: none; border-radius: 10px; color: white; cursor: pointer; font-size: 20px; font-weight: bold; width: 100%; max-width: 300px; }
-        .btn-green { background: #16a34a; } .btn-blue { background: #2563eb; }
+        .btn-green { background: #16a34a; } .btn-blue { background: #2563eb; } .btn-gray { background: #6b7280; margin-top: 10px; }
         .hidden { display: none; }
         .word-box { font-size: 48px; font-weight: 900; letter-spacing: 8px; color: #facc15; margin: 20px 0; }
         .my-score { font-size: 24px; color: #4ade80; margin-top: 20px; }
@@ -335,7 +412,12 @@ JUMBLE_PLAYER_HTML = """
     </style>
 </head>
 <body>
-    <div id="joinScreen"><h1>JUMBLE RACE</h1><input type="text" id="nameInput" placeholder="Enter your name..." style="text-transform:none;"><br><br><button class="btn-green" onclick="joinGame()">JOIN</button></div>
+    <div id="joinScreen">
+        <h1>JUMBLE RACE</h1>
+        <input type="text" id="nameInput" placeholder="Enter your name..." style="text-transform:none;">
+        <br><br>
+        <button class="btn-green" onclick="joinGame()">JOIN</button>
+    </div>
     <div id="gameScreen" class="hidden">
         <h2 style="color:#9ca3af;">Unscramble:</h2>
         <div class="word-box" id="playerWord">???</div>
@@ -343,16 +425,80 @@ JUMBLE_PLAYER_HTML = """
         <br><button class="btn-blue" onclick="submitGuess()">SUBMIT</button>
         <p class="feedback" id="feedback"></p>
         <div class="my-score">Score: <span id="myScore">0</span> / 5</div>
+        <button class="btn-gray" onclick="changeName()" style="margin-top:20px;">🔄 Change Name</button>
     </div>
-    <div id="winScreen" class="hidden"><h1 style="font-size:60px;">🏆 YOU WIN! 🏆</h1></div>
+    <div id="winScreen" class="hidden">
+        <h1 style="font-size:60px;">🏆 YOU WIN! 🏆</h1>
+        <button class="btn-gray" onclick="changeName()" style="margin-top:20px;">🔄 Play Again with New Name</button>
+    </div>
     <script>
-        const socket = io(); let myName = "";
-        function joinGame() { myName = document.getElementById('nameInput').value.trim(); if(myName) { socket.emit('jumble_join', {name: myName}); document.getElementById('joinScreen').classList.add('hidden'); document.getElementById('gameScreen').classList.remove('hidden'); } }
-        function submitGuess() { const guess = document.getElementById('guessInput').value.trim().toUpperCase(); if(guess) { socket.emit('jumble_submit_guess', {guess: guess}); document.getElementById('guessInput').value = ""; } }
-        document.getElementById('guessInput').addEventListener('keypress', function (e) { if (e.key === 'Enter') submitGuess(); });
-        socket.on('update_word', (data) => { document.getElementById('playerWord').innerText = data.scrambled; document.getElementById('feedback').innerText = ""; document.getElementById('guessInput').disabled = false; document.getElementById('guessInput').focus(); });
-        socket.on('update_my_score', (data) => { document.getElementById('myScore').innerText = data.score; if(data.won) { document.getElementById('gameScreen').classList.add('hidden'); document.getElementById('winScreen').classList.remove('hidden'); } });
-        socket.on('guess_result', (data) => { const fb = document.getElementById('feedback'); fb.innerText = data.correct ? "✅ Correct! +1" : "❌ Wrong!"; fb.style.color = data.correct ? "#4ade80" : "#f87171"; });
+        const socket = io();
+        let myName = "";
+
+        // Check if there's a saved name in localStorage
+        window.onload = function() {
+            const savedName = localStorage.getItem('jumble_player_name');
+            if(savedName) {
+                myName = savedName;
+                socket.emit('jumble_join', {name: myName});
+                document.getElementById('joinScreen').classList.add('hidden');
+                document.getElementById('gameScreen').classList.remove('hidden');
+            }
+        };
+
+        function joinGame() {
+            myName = document.getElementById('nameInput').value.trim();
+            if(myName) {
+                // Save name to localStorage
+                localStorage.setItem('jumble_player_name', myName);
+                socket.emit('jumble_join', {name: myName});
+                document.getElementById('joinScreen').classList.add('hidden');
+                document.getElementById('gameScreen').classList.remove('hidden');
+            }
+        }
+
+        function changeName() {
+            // Clear saved name
+            localStorage.removeItem('jumble_player_name');
+            myName = "";
+            document.getElementById('joinScreen').classList.remove('hidden');
+            document.getElementById('gameScreen').classList.add('hidden');
+            document.getElementById('winScreen').classList.add('hidden');
+            document.getElementById('nameInput').value = "";
+        }
+
+        function submitGuess() {
+            const guess = document.getElementById('guessInput').value.trim().toUpperCase();
+            if(guess) {
+                socket.emit('jumble_submit_guess', {guess: guess});
+                document.getElementById('guessInput').value = "";
+            }
+        }
+
+        document.getElementById('guessInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') submitGuess();
+        });
+
+        socket.on('update_word', (data) => {
+            document.getElementById('playerWord').innerText = data.scrambled;
+            document.getElementById('feedback').innerText = "";
+            document.getElementById('guessInput').disabled = false;
+            document.getElementById('guessInput').focus();
+        });
+
+        socket.on('update_my_score', (data) => {
+            document.getElementById('myScore').innerText = data.score;
+            if(data.won) {
+                document.getElementById('gameScreen').classList.add('hidden');
+                document.getElementById('winScreen').classList.remove('hidden');
+            }
+        });
+
+        socket.on('guess_result', (data) => {
+            const fb = document.getElementById('feedback');
+            fb.innerText = data.correct ? "✅ Correct! +1" : "❌ Wrong!";
+            fb.style.color = data.correct ? "#4ade80" : "#f87171";
+        });
     </script>
 </body>
 </html>
