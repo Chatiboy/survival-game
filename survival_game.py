@@ -6,6 +6,9 @@ import base64
 from io import BytesIO
 import os
 import random
+import urllib.request
+import urllib.parse
+import json
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'survival_secret')
@@ -42,95 +45,30 @@ RIDDLE_MAX_WINNERS = 3
 # --- SONG GAME VARIABLES ---
 song_players = {}
 song_current_title = ""
-song_current_notes = []
 song_round_active = False
 song_answered_this_round = []
 song_winners = []
 SONG_TARGET_SCORE = 5
 SONG_MAX_WINNERS = 3
 
-# Note Frequencies for Piano Synthesis
-NOTES = {
-    'C3': 130.81, 'D3': 146.83, 'E3': 164.81, 'F3': 174.61, 'G3': 196.00, 'A3': 220.00, 'B3': 246.94,
-    'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23, 'G4': 392.00, 'A4': 440.00, 'B4': 493.88,
-    'C5': 523.25, 'D5': 587.33, 'E5': 659.25, 'F5': 698.46, 'G5': 783.99, 'A5': 880.00, 'B5': 987.77
-}
-
-# 5 Classic Love Songs (Simplified Melodies)
+# 16 Classic Love Songs (iTunes Search Terms)
 SONG_LIST = [
-    {"title": "CAN'T HELP FALLING IN LOVE", "notes": [
-        {'n': 'C4', 'd': 0.5}, {'n': 'E4', 'd': 0.5}, {'n': 'G4', 'd': 0.8}, {'n': 'G4', 'd': 0.4},
-        {'n': 'A4', 'd': 0.5}, {'n': 'G4', 'd': 0.5}, {'n': 'F4', 'd': 0.5}, {'n': 'E4', 'd': 0.5},
-        {'n': 'F4', 'd': 0.5}, {'n': 'G4', 'd': 0.8}, {'n': 'C4', 'd': 0.5}, {'n': 'E4', 'd': 0.5},
-        {'n': 'G4', 'd': 0.8}, {'n': 'G4', 'd': 0.4}, {'n': 'A4', 'd': 0.5}, {'n': 'G4', 'd': 0.5},
-        {'n': 'F4', 'd': 0.5}, {'n': 'E4', 'd': 1.0}
-    ]},
-    {"title": "STAND BY ME", "notes": [
-        {'n': 'C4', 'd': 0.4}, {'n': 'C4', 'd': 0.4}, {'n': 'A3', 'd': 0.4}, {'n': 'A3', 'd': 0.4},
-        {'n': 'F3', 'd': 0.4}, {'n': 'F3', 'd': 0.4}, {'n': 'G3', 'd': 0.8}, {'n': 'G3', 'd': 0.4},
-        {'n': 'C4', 'd': 0.4}, {'n': 'C4', 'd': 0.4}, {'n': 'A3', 'd': 0.4}, {'n': 'A3', 'd': 0.4},
-        {'n': 'F3', 'd': 0.4}, {'n': 'F3', 'd': 0.4}, {'n': 'G3', 'd': 1.0}
-    ]},
-    {"title": "YESTERDAY", "notes": [
-        {'n': 'B4', 'd': 0.8}, {'n': 'A4', 'd': 0.4}, {'n': 'G4', 'd': 0.4}, {'n': 'A4', 'd': 0.8},
-        {'n': 'F4', 'd': 0.4}, {'n': 'G4', 'd': 0.4}, {'n': 'E4', 'd': 0.8}, {'n': 'C4', 'd': 0.4},
-        {'n': 'D4', 'd': 0.4}, {'n': 'B3', 'd': 0.8}, {'n': 'C4', 'd': 0.4}, {'n': 'D4', 'd': 0.4},
-        {'n': 'G3', 'd': 1.0}
-    ]},
-    {"title": "LET IT BE", "notes": [
-        {'n': 'E4', 'd': 0.6}, {'n': 'D4', 'd': 0.6}, {'n': 'C4', 'd': 0.6}, {'n': 'D4', 'd': 0.6},
-        {'n': 'E4', 'd': 0.6}, {'n': 'E4', 'd': 0.6}, {'n': 'E4', 'd': 1.0}, {'n': 'D4', 'd': 0.6},
-        {'n': 'C4', 'd': 0.6}, {'n': 'D4', 'd': 0.6}, {'n': 'E4', 'd': 0.6}, {'n': 'D4', 'd': 0.6},
-        {'n': 'C4', 'd': 1.2}
-    ]},
-    {"title": "MY GIRL", "notes": [
-        {'n': 'D4', 'd': 0.3}, {'n': 'D4', 'd': 0.3}, {'n': 'G4', 'd': 0.4}, {'n': 'A4', 'd': 0.4},
-        {'n': 'B4', 'd': 0.4}, {'n': 'A4', 'd': 0.4}, {'n': 'G4', 'd': 0.4}, {'n': 'D4', 'd': 0.3},
-        {'n': 'D4', 'd': 0.3}, {'n': 'G4', 'd': 0.4}, {'n': 'A4', 'd': 0.4}, {'n': 'B4', 'd': 0.4},
-        {'n': 'A4', 'd': 0.4}, {'n': 'G4', 'd': 0.8}
-    ]},
-    {"title": "UNCHAINED MELODY", "notes": [
-        {'n': 'C4', 'd': 0.4}, {'n': 'E4', 'd': 0.4}, {'n': 'G4', 'd': 0.8}, {'n': 'A4', 'd': 0.4},
-        {'n': 'G4', 'd': 0.4}, {'n': 'E4', 'd': 0.4}, {'n': 'C4', 'd': 0.4}, {'n': 'D4', 'd': 0.4},
-        {'n': 'E4', 'd': 0.8}, {'n': 'F4', 'd': 0.4}, {'n': 'E4', 'd': 0.4}, {'n': 'D4', 'd': 0.4},
-        {'n': 'C4', 'd': 1.0}
-    ]},
-    {"title": "AT LAST", "notes": [
-        {'n': 'C4', 'd': 0.6}, {'n': 'E4', 'd': 0.6}, {'n': 'G4', 'd': 0.8}, {'n': 'C5', 'd': 0.8},
-        {'n': 'B4', 'd': 0.4}, {'n': 'A4', 'd': 0.4}, {'n': 'G4', 'd': 0.8}, {'n': 'E4', 'd': 0.4},
-        {'n': 'G4', 'd': 0.4}, {'n': 'A4', 'd': 0.4}, {'n': 'G4', 'd': 0.4}, {'n': 'E4', 'd': 0.4},
-        {'n': 'C4', 'd': 1.0}
-    ]},
-    {"title": "YOUR SONG", "notes": [
-        {'n': 'E4', 'd': 0.4}, {'n': 'G4', 'd': 0.4}, {'n': 'A4', 'd': 0.8}, {'n': 'B4', 'd': 0.4},
-        {'n': 'C5', 'd': 0.4}, {'n': 'B4', 'd': 0.4}, {'n': 'A4', 'd': 0.4}, {'n': 'G4', 'd': 0.8},
-        {'n': 'A4', 'd': 0.4}, {'n': 'B4', 'd': 0.4}, {'n': 'C5', 'd': 0.8}, {'n': 'B4', 'd': 0.4},
-        {'n': 'A4', 'd': 1.0}
-    ]},
-    {"title": "ENDLESS LOVE", "notes": [
-        {'n': 'C4', 'd': 0.6}, {'n': 'D4', 'd': 0.6}, {'n': 'E4', 'd': 0.8}, {'n': 'G4', 'd': 0.8},
-        {'n': 'A4', 'd': 1.0}, {'n': 'G4', 'd': 0.4}, {'n': 'E4', 'd': 0.4}, {'n': 'D4', 'd': 0.4},
-        {'n': 'C4', 'd': 0.4}, {'n': 'D4', 'd': 0.4}, {'n': 'E4', 'd': 0.8}, {'n': 'D4', 'd': 0.4},
-        {'n': 'C4', 'd': 1.0}
-    ]},
-    {"title": "MOON RIVER", "notes": [
-        {'n': 'E4', 'd': 0.8}, {'n': 'G4', 'd': 0.8}, {'n': 'A4', 'd': 1.2}, {'n': 'G4', 'd': 0.4},
-        {'n': 'E4', 'd': 0.4}, {'n': 'C4', 'd': 0.8}, {'n': 'D4', 'd': 0.4}, {'n': 'E4', 'd': 0.8},
-        {'n': 'C4', 'd': 0.4}, {'n': 'D4', 'd': 0.4}, {'n': 'E4', 'd': 0.8}, {'n': 'D4', 'd': 0.4},
-        {'n': 'C4', 'd': 1.0}
-    ]},
-    {"title": "OVER THE RAINBOW", "notes": [
-        {'n': 'C4', 'd': 0.4}, {'n': 'C5', 'd': 0.8}, {'n': 'C5', 'd': 0.4}, {'n': 'C5', 'd': 0.8},
-        {'n': 'B4', 'd': 0.4}, {'n': 'A4', 'd': 0.8}, {'n': 'C5', 'd': 0.4}, {'n': 'B4', 'd': 0.4},
-        {'n': 'A4', 'd': 0.8}, {'n': 'G4', 'd': 0.4}, {'n': 'A4', 'd': 0.8}, {'n': 'F4', 'd': 0.4},
-        {'n': 'G4', 'd': 1.0}
-    ]},
-    {"title": "I WILL ALWAYS LOVE YOU", "notes": [
-        {'n': 'E4', 'd': 0.6}, {'n': 'E4', 'd': 0.4}, {'n': 'F4', 'd': 0.6}, {'n': 'G4', 'd': 0.8},
-        {'n': 'A4', 'd': 1.0}, {'n': 'G4', 'd': 0.4}, {'n': 'F4', 'd': 0.4}, {'n': 'E4', 'd': 0.4},
-        {'n': 'D4', 'd': 0.4}, {'n': 'E4', 'd': 0.6}, {'n': 'F4', 'd': 0.6}, {'n': 'E4', 'd': 0.4},
-        {'n': 'D4', 'd': 1.0}
-    ]}
+    {"title": "CAN'T HELP FALLING IN LOVE", "itunes": "Elvis Presley Cant Help Falling In Love"},
+    {"title": "STAND BY ME", "itunes": "Ben E King Stand By Me"},
+    {"title": "YESTERDAY", "itunes": "Beatles Yesterday"},
+    {"title": "LET IT BE", "itunes": "Beatles Let It Be"},
+    {"title": "MY GIRL", "itunes": "Temptations My Girl"},
+    {"title": "UNCHAINED MELODY", "itunes": "Righteous Brothers Unchained Melody"},
+    {"title": "AT LAST", "itunes": "Etta James At Last"},
+    {"title": "YOUR SONG", "itunes": "Elton John Your Song"},
+    {"title": "ENDLESS LOVE", "itunes": "Lionel Richie Diana Ross Endless Love"},
+    {"title": "MOON RIVER", "itunes": "Audrey Hepburn Moon River"},
+    {"title": "OVER THE RAINBOW", "itunes": "Judy Garland Over The Rainbow"},
+    {"title": "I WILL ALWAYS LOVE YOU", "itunes": "Whitney Houston I Will Always Love You"},
+    {"title": "CARELESS WHISPER", "itunes": "George Michael Careless Whisper"},
+    {"title": "MY HEART WILL GO ON", "itunes": "Celine Dion My Heart Will Go On"},
+    {"title": "CANT TAKE MY EYES OFF YOU", "itunes": "Frankie Valli Cant Take My Eyes Off You"},
+    {"title": "ALWAYS ON MY MIND", "itunes": "Elvis Presley Always On My Mind"}
 ]
 
 JUMBLE_WORD_LIST = [
@@ -206,7 +144,7 @@ MENU_HTML = """
         <a href="/select/survival" class="game-card"><span class="icon">🔪</span><h2>SURVIVAL</h2><p>Blend in or get eliminated!</p></a>
         <a href="/select/jumble" class="game-card"><span class="icon">🔤</span><h2>JUMBLE RACE</h2><p>Unscramble words fast!</p></a>
         <a href="/select/riddle" class="game-card"><span class="icon">🖼️</span><h2>EMOJI RIDDLES</h2><p>Guess the phrase from emojis!</p></a>
-        <a href="/select/song" class="game-card"><span class="icon">🎵</span><h2>GUESS THE SONG</h2><p>Listen to the piano melody!</p></a>
+        <a href="/select/song" class="game-card"><span class="icon">🎵</span><h2>GUESS THE SONG</h2><p>Listen to the real audio!</p></a>
     </div>
 </body>
 </html>
@@ -395,8 +333,7 @@ SONG_HOST_HTML = """
         button { padding: 14px 28px; border: none; border-radius: 10px; color: white; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; margin-bottom: 10px; }
         .btn-green { background: #16a34a; } .btn-blue { background: #2563eb; } .btn-red { background: #dc2626; } .btn-qr { background: #7c3aed; width: auto; padding: 10px 20px;} .btn-back { background: #4b5563; width: auto; padding: 10px 20px;}
         .song-display { text-align: center; padding: 40px; background: rgba(255,255,255,0.05); border-radius: 15px; margin-bottom: 20px; }
-        .music-icon { font-size: 80px; margin-bottom: 10px; animation: pulse 1s infinite; }
-        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+        .music-icon { font-size: 80px; margin-bottom: 10px; }
         .answer-reveal { font-size: 24px; color: #4ade80; font-weight: bold; margin-top: 10px; min-height: 30px;}
         .leaderboard-item { display: flex; justify-content: space-between; padding: 15px; background: rgba(255,255,255,0.03); border-radius: 10px; margin-bottom: 10px; font-size: 20px; }
         .score { font-weight: 900; color: #facc15; }
@@ -412,10 +349,10 @@ SONG_HOST_HTML = """
         <div class="card">
             <h2>Current Melody</h2>
             <div class="song-display">
-                <div class="music-icon" id="musicIcon">🎹</div>
-                <div class="answer-reveal" id="answerReveal">Click Play to start</div>
+                <div class="music-icon" id="musicIcon">🎧</div>
+                <div class="answer-reveal" id="answerReveal">Click Next Song to load audio...</div>
             </div>
-            <button class="btn-blue" id="playBtn" onclick="playMelody()">▶️ PLAY MELODY</button>
+            <button class="btn-blue" id="playBtn" onclick="playPreview()">▶️ PLAY PREVIEW</button>
             <button class="btn-green" id="nextBtn" onclick="socket.emit('song_next')">NEXT SONG</button>
             <button class="btn-red" onclick="socket.emit('song_reveal')">REVEAL ANSWER</button>
             <button class="btn-red" onclick="socket.emit('song_reset')">RESET GAME</button>
@@ -427,77 +364,16 @@ SONG_HOST_HTML = """
     </div>
     <script>
         const socket = io(); socket.emit('set_active_game', 'song');
-        let currentNotes = [];
-        
-        // --- REAL PIANO AUDIO ENGINE ---
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const pianoBuffers = {};
-        const notesList = ['C3','D3','E3','F3','G3','A3','B3','C4','D4','E4','F4','G4','A4','B4','C5','D5','E5','F5','G5','A5','B5'];
-        // We use a public CDN that hosts real acoustic grand piano recordings
-        const baseUrl = 'https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@gh-pages/FluidR3_GM/acoustic_grand_piano-mp3/';
-        let pianoLoaded = false;
-
-        document.getElementById('answerReveal').innerText = "Loading Real Piano...";
-
-        // Preload all piano notes into memory so there is zero lag when playing
-        async function loadPiano() {
-            try {
-                const promises = notesList.map(async (note) => {
-                    const response = await fetch(baseUrl + note + '.mp3');
-                    const arrayBuffer = await response.arrayBuffer();
-                    pianoBuffers[note] = await audioCtx.decodeAudioData(arrayBuffer);
-                });
-                await Promise.all(promises);
-                pianoLoaded = true;
-                document.getElementById('answerReveal').innerText = "🎹 Piano Ready! Click Play.";
-            } catch (e) {
-                document.getElementById('answerReveal').innerText = "Error loading piano. Check internet.";
-            }
-        }
-        loadPiano(); // Start loading immediately when page opens
-
-        function playNote(noteName, startTime, duration) {
-            if (!pianoBuffers[noteName]) return;
-            const source = audioCtx.createBufferSource();
-            source.buffer = pianoBuffers[noteName];
-            const gainNode = audioCtx.createGain();
-            source.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            
-            // Natural piano decay (lets the note ring out beautifully)
-            gainNode.gain.setValueAtTime(1, startTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration + 1.5); 
-
-            source.start(startTime);
-        }
-
-        function playMelody() {
-            if(currentNotes.length === 0 || !pianoLoaded) return;
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            
-            document.getElementById('musicIcon').innerText = "🎶";
-            document.getElementById('answerReveal').innerText = "Playing...";
-            const now = audioCtx.currentTime;
-            let time = now + 0.2;
-            
-            // PLAY THE MELODY TWICE so it's easier to guess!
-            for(let repeat = 0; repeat < 2; repeat++) {
-                currentNotes.forEach(noteObj => {
-                    playNote(noteObj.n, time, noteObj.d);
-                    // Multiply by 0.85 to make notes overlap slightly (legato) like a real pianist
-                    time += noteObj.d * 0.85; 
-                });
-                time += 0.6; // Wait a bit before repeating
-            }
-            
-            setTimeout(() => { document.getElementById('musicIcon').innerText = "🎹"; }, (time - now) * 1000);
-        }
-        // --- END PIANO ENGINE ---
+        let audioPlayer = new Audio();
 
         socket.on('update_song', (data) => { 
-            currentNotes = data.notes; 
-            document.getElementById('musicIcon').innerText = "🎹";
-            if(pianoLoaded) document.getElementById('answerReveal').innerText = "Piano Ready! Click Play.";
+            if (data.preview_url) {
+                audioPlayer.src = data.preview_url;
+                document.getElementById('answerReveal').innerText = "✅ Audio Loaded! Click Play.";
+                document.getElementById('musicIcon').innerText = "🎧";
+            } else {
+                document.getElementById('answerReveal').innerText = "⚠️ Could not load audio.";
+            }
         });
         socket.on('reveal_song_answer', (data) => { document.getElementById('answerReveal').innerText = "Answer: " + data.answer; });
         socket.on('update_leaderboard', (data) => { 
@@ -509,12 +385,23 @@ SONG_HOST_HTML = """
             document.getElementById('nextBtn').disabled = (data.winners.length === 3); 
             document.getElementById('nextBtn').innerText = data.winners.length === 3 ? "GAME OVER" : "NEXT SONG"; 
         });
+
+        function playPreview() {
+            if (audioPlayer.src) {
+                audioPlayer.play();
+                document.getElementById('musicIcon').innerText = "🎶";
+                document.getElementById('answerReveal').innerText = "Playing 30s preview...";
+                audioPlayer.onended = () => { 
+                    document.getElementById('musicIcon').innerText = "🎧"; 
+                    document.getElementById('answerReveal').innerText = "Preview finished.";
+                };
+            }
+        }
     </script>
 </body>
 </html>
 """
 
-# Player HTMLs (Survival, Jumble, Riddle, Song)
 SURVIVAL_PLAYER_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -644,15 +531,14 @@ SONG_PLAYER_HTML = """
         button { padding: 15px 30px; border: none; border-radius: 10px; color: white; cursor: pointer; font-size: 20px; font-weight: bold; width: 100%; max-width: 300px; }
         .btn-green { background: #16a34a; } .btn-blue { background: #2563eb; } .btn-gray { background: #6b7280; margin-top: 10px; }
         .hidden { display: none; }
-        .music-icon { font-size: 80px; margin: 20px 0; animation: pulse 1s infinite; }
-        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+        .music-icon { font-size: 80px; margin: 20px 0; }
         .my-score { font-size: 24px; color: #4ade80; margin-top: 20px; }
         .feedback { margin-top: 15px; font-size: 18px; min-height: 24px; }
     </style>
 </head>
 <body>
     <div id="joinScreen"><h1>GUESS THE SONG</h1><input type="text" id="nameInput" placeholder="Enter your name..." style="text-transform:none;"><br><br><button class="btn-green" onclick="joinGame()">JOIN</button></div>
-    <div id="gameScreen" class="hidden"><h2 style="color:#9ca3af;">Listen to the melody...</h2><div class="music-icon" id="musicIcon">🎧</div><input type="text" id="guessInput" placeholder="Song title..." autocomplete="off"><br><button class="btn-blue" onclick="submitGuess()">SUBMIT</button><p class="feedback" id="feedback"></p><div class="my-score">Score: <span id="myScore">0</span> / 5</div><button class="btn-gray" onclick="changeName()" style="margin-top:20px;">🔄 Change Name</button></div>
+    <div id="gameScreen" class="hidden"><h2 style="color:#9ca3af;">Listen to the host's speakers!</h2><div class="music-icon" id="musicIcon">🎧</div><input type="text" id="guessInput" placeholder="Song title..." autocomplete="off"><br><button class="btn-blue" onclick="submitGuess()">SUBMIT</button><p class="feedback" id="feedback"></p><div class="my-score">Score: <span id="myScore">0</span> / 5</div><button class="btn-gray" onclick="changeName()" style="margin-top:20px;">🔄 Change Name</button></div>
     <div id="winScreen" class="hidden"><h1 style="font-size:60px;">🏆 YOU WIN! 🏆</h1><button class="btn-gray" onclick="changeName()" style="margin-top:20px;">🔄 Play Again</button></div>
     <script>
         const socket = io(); let myName = "";
@@ -662,7 +548,7 @@ SONG_PLAYER_HTML = """
         function changeName() { localStorage.removeItem('song_player_name'); localStorage.removeItem('song_player_id'); myName = ""; document.getElementById('joinScreen').classList.remove('hidden'); document.getElementById('gameScreen').classList.add('hidden'); document.getElementById('winScreen').classList.add('hidden'); document.getElementById('nameInput').value = ""; }
         function submitGuess() { const guess = document.getElementById('guessInput').value.trim().toUpperCase(); if(guess) { socket.emit('song_submit_guess', {guess: guess}); document.getElementById('guessInput').value = ""; } }
         document.getElementById('guessInput').addEventListener('keypress', function (e) { if (e.key === 'Enter') submitGuess(); });
-        socket.on('update_song', (data) => { document.getElementById('musicIcon').innerText = "🎶"; document.getElementById('feedback').innerText = "Listen to the host's speakers!"; document.getElementById('guessInput').disabled = false; document.getElementById('guessInput').focus(); });
+        socket.on('update_song', (data) => { document.getElementById('musicIcon').innerText = "🎶"; document.getElementById('feedback').innerText = "Listen closely!"; document.getElementById('guessInput').disabled = false; document.getElementById('guessInput').focus(); });
         socket.on('update_my_score', (data) => { document.getElementById('myScore').innerText = data.score; if(data.won) { document.getElementById('gameScreen').classList.add('hidden'); document.getElementById('winScreen').classList.remove('hidden'); } });
         socket.on('guess_result', (data) => { const fb = document.getElementById('feedback'); if (data.correct) { fb.innerText = "✅ Correct! +1"; fb.style.color = "#4ade80"; } else { fb.innerText = "❌ Wrong!"; fb.style.color = "#f87171"; } });
     </script>
@@ -930,13 +816,28 @@ def song_handle_join(data):
 @socketio.on('song_next')
 def song_handle_next():
     if active_game != 'song': return
-    global song_current_title, song_current_notes, song_round_active, song_answered_this_round
+    global song_current_title, song_round_active, song_answered_this_round
     if len(song_winners) >= SONG_MAX_WINNERS: return
     song_round_active = True; song_answered_this_round = []
     new_song = random.choice(SONG_LIST)
     while new_song['title'] == song_current_title and len(SONG_LIST) > 1: new_song = random.choice(SONG_LIST)
-    song_current_title = new_song['title']; song_current_notes = new_song['notes']
-    emit('update_song', {'title': song_current_title, 'notes': song_current_notes}, broadcast=True)
+    
+    song_current_title = new_song['title']
+    preview_url = ""
+    
+    # Fetch real audio preview from iTunes API
+    try:
+        search_term = urllib.parse.quote(new_song['itunes'])
+        url = f"https://itunes.apple.com/search?term={search_term}&media=music&limit=1"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        response = urllib.request.urlopen(req)
+        data = json.loads(response.read())
+        if data['results']:
+            preview_url = data['results'][0]['previewUrl']
+    except Exception as e:
+        print(f"iTunes API error: {e}")
+
+    emit('update_song', {'title': song_current_title, 'preview_url': preview_url}, broadcast=True)
 
 @socketio.on('song_reveal')
 def song_handle_reveal():
@@ -965,7 +866,7 @@ def song_handle_reset():
     global song_winners, song_current_title, song_round_active
     for sid in song_players: song_players[sid]['score'] = 0; song_players[sid]['rank'] = None
     song_winners = []; song_current_title = ""; song_round_active = False
-    song_broadcast_leaderboard(); emit('update_song', {'title': "", 'notes': []}, broadcast=True)
+    song_broadcast_leaderboard(); emit('update_song', {'title': "", 'preview_url': ""}, broadcast=True)
     for sid in song_players: emit('update_my_score', {'score': 0, 'won': False}, room=sid)
 
 def song_broadcast_leaderboard():
