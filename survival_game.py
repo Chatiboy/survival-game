@@ -482,12 +482,8 @@ SURVIVAL_PLAYER_HTML = """
         window.onload = function() {
             const savedName = localStorage.getItem('survival_player_name');
             if(savedName) {
-                myName = savedName;
-                const playerId = getOrCreatePlayerId();
-                socket.emit('survival_join', {name: myName, player_id: playerId}); // Send ID!
-                document.getElementById('joinScreen').classList.add('hidden');
-                document.getElementById('waitingScreen').classList.remove('hidden');
-                document.getElementById('playerName').innerText = myName;
+                // Pre-fill the box instead of hiding it!
+                document.getElementById('nameInput').value = savedName;
             }
         };
 
@@ -496,7 +492,7 @@ SURVIVAL_PLAYER_HTML = """
             if(myName) {
                 localStorage.setItem('survival_player_name', myName);
                 const playerId = getOrCreatePlayerId();
-                socket.emit('survival_join', {name: myName, player_id: playerId}); // Send ID!
+                socket.emit('survival_join', {name: myName, player_id: playerId});
                 document.getElementById('joinScreen').classList.add('hidden');
                 document.getElementById('waitingScreen').classList.remove('hidden');
                 document.getElementById('playerName').innerText = myName;
@@ -600,19 +596,17 @@ JUMBLE_PLAYER_HTML = """
         window.onload = function() {
             const savedName = localStorage.getItem('jumble_player_name');
             if(savedName) {
-                myName = savedName;
-                socket.emit('jumble_join', {name: myName});
-                document.getElementById('joinScreen').classList.add('hidden');
-                document.getElementById('gameScreen').classList.remove('hidden');
+                // Pre-fill the box instead of hiding it!
+                document.getElementById('nameInput').value = savedName;
             }
         };
 
         function joinGame() {
             myName = document.getElementById('nameInput').value.trim();
             if(myName) {
-                // Save name to localStorage
                 localStorage.setItem('jumble_player_name', myName);
-                socket.emit('jumble_join', {name: myName});
+                const playerId = getOrCreatePlayerId();
+                socket.emit('jumble_join', {name: myName, player_id: playerId});
                 document.getElementById('joinScreen').classList.add('hidden');
                 document.getElementById('gameScreen').classList.remove('hidden');
             }
