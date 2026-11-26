@@ -393,27 +393,32 @@ SURVIVAL_PLAYER_HTML = """
         <button class="btn-gray" onclick="changeName()" style="margin-top:20px;">🔄 Play Again with New Name</button>
     </div>
     <script>
-        const socket = io();
+        const socket = io(); 
         let myName = "";
 
-        // Check if there's a saved name in localStorage
+        // Helper to create a secret ID card
+        function getOrCreatePlayerId() {
+            let id = localStorage.getItem('survival_player_id');
+            if (!id) {
+                id = 'player_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('survival_player_id', id);
+            }
+            return id;
+        }
+
         window.onload = function() {
             const savedName = localStorage.getItem('survival_player_name');
             if(savedName) {
-                myName = savedName;
-                socket.emit('survival_join', {name: myName});
-                document.getElementById('joinScreen').classList.add('hidden');
-                document.getElementById('waitingScreen').classList.remove('hidden');
-                document.getElementById('playerName').innerText = myName;
+                document.getElementById('nameInput').value = savedName;
             }
         };
 
         function joinGame() {
             myName = document.getElementById('nameInput').value.trim();
             if(myName) {
-                // Save name to localStorage
                 localStorage.setItem('survival_player_name', myName);
-                socket.emit('survival_join', {name: myName});
+                const playerId = getOrCreatePlayerId();
+                socket.emit('survival_join', {name: myName, player_id: playerId});
                 document.getElementById('joinScreen').classList.add('hidden');
                 document.getElementById('waitingScreen').classList.remove('hidden');
                 document.getElementById('playerName').innerText = myName;
@@ -421,8 +426,8 @@ SURVIVAL_PLAYER_HTML = """
         }
 
         function changeName() {
-            // Clear saved name
             localStorage.removeItem('survival_player_name');
+            localStorage.removeItem('survival_player_id');
             myName = "";
             document.getElementById('joinScreen').classList.remove('hidden');
             document.getElementById('waitingScreen').classList.add('hidden');
@@ -465,7 +470,7 @@ SURVIVAL_PLAYER_HTML = """
             document.getElementById('waitingScreen').classList.add('hidden');
             document.getElementById('eliminatedScreen').classList.remove('hidden');
         });
-        <script>
+    </script>
         const socket = io(); 
         let myName = "";
 
@@ -592,11 +597,19 @@ JUMBLE_PLAYER_HTML = """
         const socket = io();
         let myName = "";
 
-        // Check if there's a saved name in localStorage
+        // Helper to create a secret ID card
+        function getOrCreatePlayerId() {
+            let id = localStorage.getItem('jumble_player_id');
+            if (!id) {
+                id = 'player_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('jumble_player_id', id);
+            }
+            return id;
+        }
+
         window.onload = function() {
             const savedName = localStorage.getItem('jumble_player_name');
             if(savedName) {
-                // Pre-fill the box instead of hiding it!
                 document.getElementById('nameInput').value = savedName;
             }
         };
@@ -613,8 +626,8 @@ JUMBLE_PLAYER_HTML = """
         }
 
         function changeName() {
-            // Clear saved name
             localStorage.removeItem('jumble_player_name');
+            localStorage.removeItem('jumble_player_id');
             myName = "";
             document.getElementById('joinScreen').classList.remove('hidden');
             document.getElementById('gameScreen').classList.add('hidden');
