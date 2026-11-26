@@ -697,15 +697,14 @@ PLAYER_HTML = """
 def host_dashboard():
     return render_template_string(HOST_HTML)
 
-   @app.route('/qr')
-   def qr_page():
-       # This automatically detects your Render URL!
-       host = request.host
-       scheme = request.scheme
-       player_url = f"{scheme}://{host}/play"
-       
-       qr_code = generate_qr_code(player_url)
-       return render_template_string(QR_HTML, qr_code=qr_code, player_url=player_url)
+@app.route('/qr')
+def qr_page():
+    # This automatically detects your Render URL!
+    host = request.host
+    scheme = request.scheme
+    player_url = f"{scheme}://{host}/play"   
+    qr_code = generate_qr_code(player_url)
+    return render_template_string(QR_HTML, qr_code=qr_code, player_url=player_url)
 
 @app.route('/play')
 def player_screen():
