@@ -442,17 +442,31 @@ SONG_HOST_HTML = """
         function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
         
         function playNote(freq, startTime, duration) {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.type = 'triangle'; // Sounds like a piano/organ
-            osc.frequency.value = freq;
-            // Envelope for piano sound
-            gain.gain.setValueAtTime(0, startTime);
-            gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05); // Attack
-            gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration); // Decay
-            osc.start(startTime);
-            osc.stop(startTime + duration);
+            // Real pianos have harmonics. We layer 3 sine waves to mimic a real piano.
+            const harmonics = [
+                { mult: 1, vol: 0.4, decay: duration },       // Main note
+                { mult: 2, vol: 0.15, decay: duration * 0.6 }, // Higher harmonic (fades faster)
+                { mult: 3, vol: 0.05, decay: duration * 0.3 }  // Highest harmonic (fades very fast)
+            ];
+
+            harmonics.forEach(h => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = 'sine'; 
+                osc.frequency.value = freq * h.mult;
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                // Realistic piano envelope (fast attack, natural decay)
+                gain.gain.setValueAtTime(0, startTime);
+                gain.gain.linearRampToValueAtTime(h.vol, startTime + 0.02); 
+                gain.gain.exponentialRampToValueAtTime(0.001, startTime + h.decay); 
+                
+                osc.start(startTime);
+                osc.stop(startTime + h.decay + 0.1);
+            });
         }
 
         function playMelody() {
