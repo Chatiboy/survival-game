@@ -848,17 +848,26 @@ def song_handle_reveal():
 def song_handle_guess(data):
     if active_game != 'song' or not song_round_active or len(song_winners) >= SONG_MAX_WINNERS: return
     sid = request.sid
-    if sid not in song_players or sid in song_answered_this_round: return
+    if sid not in song_players: return
+    
+    # NEW RULE: If someone already got it right this round, ignore all other guesses!
+    if len(song_answered_this_round) > 0: 
+        emit('guess_result', {'correct': False}, room=sid)
+        return 
+
     guess = data['guess'].strip().upper()
     if guess == song_current_title:
-        song_players[sid]['score'] += 1; song_answered_this_round.append(sid)
+        song_players[sid]['score'] += 1
+        song_answered_this_round.append(sid) # Mark that someone got it right
+        
         emit('guess_result', {'correct': True}, room=sid)
         if song_players[sid]['score'] >= SONG_TARGET_SCORE and song_players[sid]['rank'] is None:
             song_players[sid]['rank'] = f"{len(song_winners) + 1}"; song_winners.append(song_players[sid])
             emit('update_my_score', {'score': song_players[sid]['score'], 'won': True}, room=sid)
         else: emit('update_my_score', {'score': song_players[sid]['score'], 'won': False}, room=sid)
         song_broadcast_leaderboard()
-    else: emit('guess_result', {'correct': False}, room=sid)
+    else: 
+        emit('guess_result', {'correct': False}, room=sid)
 
 @socketio.on('song_reset')
 def song_handle_reset():
